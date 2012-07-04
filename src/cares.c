@@ -16,12 +16,6 @@
 static PyObject* PyExc_AresError;
 
 
-typedef struct {
-    Channel *channel;
-    PyObject *cb;
-} ares_cb_data_t;
-
-
 static PyTypeObject AresHostResultType;
 
 static PyStructSequence_Field ares_host_result_fields[] = {
@@ -112,7 +106,6 @@ ares__sock_state_cb(void *data, ares_socket_t socket_fd, int readable, int writa
     Channel *self;
     PyObject *result, *fd, *py_readable, *py_writable;
 
-    ASSERT(data);
     self = (Channel *)data;
     ASSERT(self);
     /* Object could go out of scope in the callback, increase refcount to avoid it */
@@ -144,18 +137,10 @@ query_a_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int an
     char ip[INET6_ADDRSTRLEN];
     char **ptr;
     struct hostent *hostent;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -205,9 +190,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -220,19 +202,10 @@ query_aaaa_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int
     char ip[INET6_ADDRSTRLEN];
     char **ptr;
     struct hostent *hostent;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -282,9 +255,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -295,19 +265,10 @@ query_cname_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, in
     PyGILState_STATE gstate = PyGILState_Ensure();
     int parse_status;
     struct hostent *hostent;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -351,9 +312,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -364,19 +322,10 @@ query_mx_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int a
     PyGILState_STATE gstate = PyGILState_Ensure();
     int parse_status;
     struct ares_mx_reply *mx_reply, *mx_ptr;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -427,9 +376,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -441,19 +387,10 @@ query_ns_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int a
     int parse_status;
     char **ptr;
     struct hostent *hostent;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -502,9 +439,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -515,19 +449,10 @@ query_txt_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int 
     PyGILState_STATE gstate = PyGILState_Ensure();
     int parse_status;
     struct ares_txt_reply *txt_reply, *txt_ptr;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -576,9 +501,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -589,19 +511,10 @@ query_srv_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int 
     PyGILState_STATE gstate = PyGILState_Ensure();
     int parse_status;
     struct ares_srv_reply *srv_reply, *srv_ptr;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -654,9 +567,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -667,19 +577,10 @@ query_naptr_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, in
     PyGILState_STATE gstate = PyGILState_Ensure();
     int parse_status;
     struct ares_naptr_reply *naptr_reply, *naptr_ptr;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *dns_result, *errorno, *tmp, *result, *callback;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -734,9 +635,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -747,19 +645,10 @@ host_cb(void *arg, int status, int timeouts, struct hostent *hostent)
     PyGILState_STATE gstate = PyGILState_Ensure();
     char ip[INET6_ADDRSTRLEN];
     char **ptr;
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *callback, *dns_name, *errorno, *dns_aliases, *dns_addrlist, *dns_result, *tmp, *result;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -828,9 +717,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -839,19 +725,10 @@ static void
 nameinfo_cb(void *arg, int status, int timeouts, char *node, char *service)
 {
     PyGILState_STATE gstate = PyGILState_Ensure();
-    ares_cb_data_t *data;
-    Channel *self;
     PyObject *callback, *errorno, *dns_node, *dns_service, *dns_result, *result;
 
-    ASSERT(arg);
-
-    data = (ares_cb_data_t*)arg;
-    self = data->channel;
-    callback = data->cb;
-
-    ASSERT(self);
-    /* Object could go out of scope in the callback, increase refcount to avoid it */
-    Py_INCREF(self);
+    callback = (PyObject *)arg;
+    ASSERT(callback);
 
     if (status != ARES_SUCCESS) {
         errorno = PyInt_FromLong((long)status);
@@ -884,7 +761,7 @@ nameinfo_cb(void *arg, int status, int timeouts, char *node, char *service)
     Py_INCREF(Py_None);
 
 callback:
-    result = PyObject_CallFunctionObjArgs(callback, self, dns_result, errorno, NULL);
+    result = PyObject_CallFunctionObjArgs(callback, dns_result, errorno, NULL);
     if (result == NULL) {
         PyErr_WriteUnraisable(callback);
     }
@@ -893,9 +770,6 @@ callback:
     Py_DECREF(errorno);
 
     Py_DECREF(callback);
-    PyMem_Free(data);
-
-    Py_DECREF(self);
     PyGILState_Release(gstate);
 }
 
@@ -905,7 +779,6 @@ Channel_func_query(Channel *self, PyObject *args)
 {
     char *name;
     int query_type;
-    ares_cb_data_t *cb_data;
     PyObject *callback;
 
     CHECK_CHANNEL(self);
@@ -919,68 +792,60 @@ Channel_func_query(Channel *self, PyObject *args)
         return NULL;
     }
 
-    cb_data = (ares_cb_data_t*) PyMem_Malloc(sizeof *cb_data);
-    if (!cb_data) {
-        return PyErr_NoMemory();
-    }
-
     Py_INCREF(callback);
-    cb_data->channel = self;
-    cb_data->cb = callback;
 
     switch (query_type) {
         case T_A:
         {
-            ares_query(self->channel, name, C_IN, T_A, &query_a_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_A, &query_a_cb, (void *)callback);
             break;
         }
 
         case T_AAAA:
         {
-            ares_query(self->channel, name, C_IN, T_AAAA, &query_aaaa_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_AAAA, &query_aaaa_cb, (void *)callback);
             break;
         }
 
         case T_CNAME:
         {
-            ares_query(self->channel, name, C_IN, T_CNAME, &query_cname_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_CNAME, &query_cname_cb, (void *)callback);
             break;
         }
 
         case T_MX:
         {
-            ares_query(self->channel, name, C_IN, T_MX, &query_mx_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_MX, &query_mx_cb, (void *)callback);
             break;
         }
 
         case T_NAPTR:
         {
-            ares_query(self->channel, name, C_IN, T_NAPTR, &query_naptr_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_NAPTR, &query_naptr_cb, (void *)callback);
             break;
         }
 
         case T_NS:
         {
-            ares_query(self->channel, name, C_IN, T_NS, &query_ns_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_NS, &query_ns_cb, (void *)callback);
             break;
         }
 
         case T_SRV:
         {
-            ares_query(self->channel, name, C_IN, T_SRV, &query_srv_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_SRV, &query_srv_cb, (void *)callback);
             break;
         }
 
         case T_TXT:
         {
-            ares_query(self->channel, name, C_IN, T_TXT, &query_txt_cb, (void *)cb_data);
+            ares_query(self->channel, name, C_IN, T_TXT, &query_txt_cb, (void *)callback);
             break;
         }
 
         default:
         {
             Py_DECREF(callback);
-            PyMem_Free(cb_data);
             PyErr_SetString(PyExc_AresError, "invalid query type specified");
             return NULL;
         }
@@ -994,7 +859,6 @@ static PyObject *
 Channel_func_gethostbyname(Channel *self, PyObject *args, PyObject *kwargs)
 {
     char *name;
-    ares_cb_data_t *cb_data;
     PyObject *callback;
 
     if (!PyArg_ParseTuple(args, "sO:gethostbyname", &name, &callback)) {
@@ -1006,16 +870,8 @@ Channel_func_gethostbyname(Channel *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    cb_data = (ares_cb_data_t*) PyMem_Malloc(sizeof *cb_data);
-    if (!cb_data) {
-        return PyErr_NoMemory();
-    }
-
     Py_INCREF(callback);
-    cb_data->channel = self;
-    cb_data->cb = callback;
-
-    ares_gethostbyname(self->channel, name, AF_INET, &host_cb, (void *)cb_data);
+    ares_gethostbyname(self->channel, name, AF_INET, &host_cb, (void *)callback);
 
     Py_RETURN_NONE;
 }
@@ -1029,7 +885,6 @@ Channel_func_gethostbyaddr(Channel *self, PyObject *args, PyObject *kwargs)
     void *address;
     struct in_addr addr4;
     struct in6_addr addr6;
-    ares_cb_data_t *cb_data;
     PyObject *callback;
 
     if (!PyArg_ParseTuple(args, "sO:gethostbyaddr", &name, &callback)) {
@@ -1054,16 +909,8 @@ Channel_func_gethostbyaddr(Channel *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    cb_data = (ares_cb_data_t*) PyMem_Malloc(sizeof *cb_data);
-    if (!cb_data) {
-        return PyErr_NoMemory();
-    }
-
     Py_INCREF(callback);
-    cb_data->channel = self;
-    cb_data->cb = callback;
-
-    ares_gethostbyaddr(self->channel, address, length, family, &host_cb, (void *)cb_data);
+    ares_gethostbyaddr(self->channel, address, length, family, &host_cb, (void *)callback);
 
     Py_RETURN_NONE;
 }
@@ -1079,7 +926,6 @@ Channel_func_getnameinfo(Channel *self, PyObject *args, PyObject *kwargs)
     struct sockaddr *sa;
     struct sockaddr_in sa4;
     struct sockaddr_in6 sa6;
-    ares_cb_data_t *cb_data;
     PyObject *callback;
 
     if (!PyArg_ParseTuple(args, "(si)iO:getnameinfo", &addr, &port, &flags, &callback)) {
@@ -1109,16 +955,9 @@ Channel_func_getnameinfo(Channel *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    cb_data = (ares_cb_data_t*) PyMem_Malloc(sizeof *cb_data);
-    if (!cb_data) {
-        return PyErr_NoMemory();
-    }
-
     Py_INCREF(callback);
-    cb_data->channel = self;
-    cb_data->cb = callback;
+    ares_getnameinfo(self->channel, sa, length, flags, &nameinfo_cb, (void *)callback);
 
-    ares_getnameinfo(self->channel, sa, length, flags, &nameinfo_cb, (void *)cb_data);
     Py_RETURN_NONE;
 }
 
