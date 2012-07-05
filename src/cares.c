@@ -1,7 +1,4 @@
 
-
-// TODO: atexit: ares library cleanup
-
 #include "nameser.h"
 
 #define CHECK_CHANNEL(ch)                                                           \
@@ -11,6 +8,17 @@
             return NULL;                                                            \
         }                                                                           \
     } while(0)                                                                      \
+
+
+static Bool ares_lib_initialized = False;
+
+static void
+_ares_cleanup(void)
+{
+    if (ares_lib_initialized) {
+        ares_library_cleanup();
+    }
+}
 
 
 static PyObject* PyExc_AresError;
@@ -1278,6 +1286,7 @@ Channel_tp_init(Channel *self, PyObject *args, PyObject *kwargs)
         PyErr_SetString(PyExc_AresError, "error initializing c-ares library");
         return -1;
     }
+    ares_lib_initialized = True;
 
     memset(&options, 0, sizeof(struct ares_options));
 
@@ -1461,6 +1470,9 @@ init_ares(void)
     if (module == NULL) {
         return NULL;
     }
+
+    /* Cleanup ares on exit */
+    Py_AtExit(_ares_cleanup);
 
     /* PyStructSequence types */
     if (AresHostResultType.tp_name == 0)
