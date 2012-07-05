@@ -1010,8 +1010,15 @@ Channel_func_set_local_ip6(Channel *self, PyObject *args)
 static PyObject *
 Channel_func_set_local_dev(Channel *self, PyObject *args)
 {
+    char *dev;
+
     CHECK_CHANNEL(self);
-    // TODO
+
+    if (PyArg_ParseTuple(args, "s:set_local_dev", &dev)) {
+        return NULL;
+    }
+    ares_set_local_dev(self->channel, dev);
+
     Py_RETURN_NONE;
 }
 
@@ -1036,7 +1043,7 @@ static PyObject *
 fdset2list(fd_set set)
 {
     int i;
-    PyObject *lst;
+    PyObject *lst, *item;
     
     lst = PyList_New(0);
     if (!lst) {
@@ -1046,8 +1053,9 @@ fdset2list(fd_set set)
 
     for (i = 0; i < FD_SETSIZE; i++) {
         if (FD_ISSET(i, &set)) {
-            PyList_Append(lst, PyInt_FromLong((long)i));
-            // TODO: check for errors
+            item = PyInt_FromLong((long)i);
+            PyList_Append(lst, item);
+            Py_DECREF(item);
         }
     }
     return lst;
@@ -1110,8 +1118,8 @@ double_from_timeval(struct timeval *tv)
 static PyObject *
 Channel_func_timeout(Channel *self, PyObject *args)
 {
-    double timeout;
-    struct timeval tv, *tvp;
+    double timeout = -1;
+    struct timeval tv, maxtv, *tvp, *maxtvp;
 
     CHECK_CHANNEL(self);
 
@@ -1119,8 +1127,19 @@ Channel_func_timeout(Channel *self, PyObject *args)
         return NULL;
     }
 
-    // TODO
-    tvp = ares_timeout(self->channel, NULL, &tv);
+    if (timeout != -1 && timeout < 0.0) {
+        PyErr_SetString(PyExc_ValueError, "timeout needs to be a positive number");
+        return NULL;
+    }
+
+    if (timeout != -1) {
+        timeval_from_double(timeout, &maxtv);
+        maxtvp = &maxtv;
+    } else {
+        maxtvp = NULL;
+    }
+
+    tvp = ares_timeout(self->channel, maxtvp, &tv);
     return PyFloat_FromDouble(double_from_timeval(tvp));
 }
 
