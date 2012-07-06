@@ -9,6 +9,15 @@
         }                                                                           \
     } while(0)                                                                      \
 
+#define RAISE_ARES_EXCEPTION(code)                                                  \
+    do {                                                                            \
+        PyObject *exc_data = Py_BuildValue("(is)", code, ares_strerror(code));      \
+        if (exc_data != NULL) {                                                     \
+            PyErr_SetObject(PyExc_AresError, exc_data);                             \
+            Py_DECREF(exc_data);                                                    \
+        }                                                                           \
+    } while(0)                                                                      \
+
 
 static Bool ares_lib_initialized = False;
 
@@ -68,6 +77,26 @@ static PyStructSequence_Desc ares_query_mx_result_desc = {
     NULL,
     ares_query_mx_result_fields,
     2
+};
+
+static PyTypeObject AresQuerySOAResultType;
+
+static PyStructSequence_Field ares_query_soa_result_fields[] = {
+    {"nsname", ""},
+    {"hostmaster", ""},
+    {"serial", ""},
+    {"refresh", ""},
+    {"retry", ""},
+    {"expires", ""},
+    {"minttl", ""},
+    {NULL}
+};
+
+static PyStructSequence_Desc ares_query_soa_result_desc = {
+    "ares_query_soa_result",
+    NULL,
+    ares_query_soa_result_fields,
+    7
 };
 
 static PyTypeObject AresQuerySRVResultType;
@@ -514,6 +543,68 @@ callback:
 
 
 static void
+query_soa_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int answer_len)
+{
+    PyGILState_STATE gstate = PyGILState_Ensure();
+    int parse_status;
+    struct ares_soa_reply *soa_reply;
+    PyObject *dns_result, *errorno, *result, *callback;
+
+    callback = (PyObject *)arg;
+    ASSERT(callback);
+
+    if (status != ARES_SUCCESS) {
+        errorno = PyInt_FromLong((long)status);
+        dns_result = Py_None;
+        Py_INCREF(Py_None);
+        goto callback;
+    }
+
+    parse_status = ares_parse_soa_reply(answer_buf, answer_len, &soa_reply);
+    if (parse_status != ARES_SUCCESS) {
+        errorno = PyInt_FromLong((long)parse_status);
+        dns_result = Py_None;
+        Py_INCREF(Py_None);
+        goto callback;
+    }
+
+    dns_result = PyStructSequence_New(&AresQuerySOAResultType);
+    if (!dns_result) {
+        PyErr_NoMemory();
+        PyErr_WriteUnraisable(Py_None);
+        errorno = PyInt_FromLong((long)ARES_ENOMEM);
+        dns_result = Py_None;
+        Py_INCREF(Py_None);
+        goto callback;
+    }
+
+    PyStructSequence_SET_ITEM(dns_result, 0, PYUVString_FromString(soa_reply->nsname));
+    PyStructSequence_SET_ITEM(dns_result, 1, PYUVString_FromString(soa_reply->hostmaster));
+    PyStructSequence_SET_ITEM(dns_result, 2, PyInt_FromLong((long)soa_reply->serial));
+    PyStructSequence_SET_ITEM(dns_result, 3, PyInt_FromLong((long)soa_reply->refresh));
+    PyStructSequence_SET_ITEM(dns_result, 4, PyInt_FromLong((long)soa_reply->retry));
+    PyStructSequence_SET_ITEM(dns_result, 5, PyInt_FromLong((long)soa_reply->expire));
+    PyStructSequence_SET_ITEM(dns_result, 6, PyInt_FromLong((long)soa_reply->minttl));
+
+    ares_free_data(soa_reply);
+    errorno = Py_None;
+    Py_INCREF(Py_None);
+
+callback:
+    result = PyObject_CallFunctionObjArgs(callback, dns_result, errorno, NULL);
+    if (result == NULL) {
+        PyErr_WriteUnraisable(callback);
+    }
+    Py_XDECREF(result);
+    Py_DECREF(dns_result);
+    Py_DECREF(errorno);
+
+    Py_DECREF(callback);
+    PyGILState_Release(gstate);
+}
+
+
+static void
 query_srv_cb(void *arg, int status,int timeouts, unsigned char *answer_buf, int answer_len)
 {
     PyGILState_STATE gstate = PyGILState_Ensure();
@@ -791,7 +882,7 @@ Channel_func_query(Channel *self, PyObject *args)
 
     CHECK_CHANNEL(self);
 
-    if (!PyArg_ParseTuple(args, "isO:query_a", &query_type, &name, &callback)) {
+    if (!PyArg_ParseTuple(args, "siO:query", &name, &query_type, &callback)) {
         return NULL;
     }
 
@@ -839,6 +930,12 @@ Channel_func_query(Channel *self, PyObject *args)
             break;
         }
 
+        case T_SOA:
+        {
+            ares_query(self->channel, name, C_IN, T_SOA, &query_soa_cb, (void *)callback);
+            break;
+        }
+
         case T_SRV:
         {
             ares_query(self->channel, name, C_IN, T_SRV, &query_srv_cb, (void *)callback);
@@ -864,12 +961,13 @@ Channel_func_query(Channel *self, PyObject *args)
 
 
 static PyObject *
-Channel_func_gethostbyname(Channel *self, PyObject *args, PyObject *kwargs)
+Channel_func_gethostbyname(Channel *self, PyObject *args)
 {
     char *name;
+    int family;
     PyObject *callback;
 
-    if (!PyArg_ParseTuple(args, "sO:gethostbyname", &name, &callback)) {
+    if (!PyArg_ParseTuple(args, "siO:gethostbyname", &name, &family, &callback)) {
         return NULL;
     }
 
@@ -879,14 +977,14 @@ Channel_func_gethostbyname(Channel *self, PyObject *args, PyObject *kwargs)
     }
 
     Py_INCREF(callback);
-    ares_gethostbyname(self->channel, name, AF_INET, &host_cb, (void *)callback);
+    ares_gethostbyname(self->channel, name, family, &host_cb, (void *)callback);
 
     Py_RETURN_NONE;
 }
 
 
 static PyObject *
-Channel_func_gethostbyaddr(Channel *self, PyObject *args, PyObject *kwargs)
+Channel_func_gethostbyaddr(Channel *self, PyObject *args)
 {
     char *name;
     int family, length;
@@ -895,25 +993,33 @@ Channel_func_gethostbyaddr(Channel *self, PyObject *args, PyObject *kwargs)
     struct in6_addr addr6;
     PyObject *callback;
 
-    if (!PyArg_ParseTuple(args, "sO:gethostbyaddr", &name, &callback)) {
+    if (!PyArg_ParseTuple(args, "siO:gethostbyaddr", &name, &family, &callback)) {
         return NULL;
-    }
+        }
 
     if (!PyCallable_Check(callback)) {
         PyErr_SetString(PyExc_TypeError, "a callable is required");
         return NULL;
     }
 
-    if (uv_inet_pton(AF_INET, name, &addr4) == 1) {
-        family = AF_INET;
-        length = sizeof(struct in_addr);
-        address = (void *)&addr4;
-    } else if (uv_inet_pton(AF_INET6, name, &addr6) == 1) {
-        family = AF_INET6;
-        length = sizeof(struct in6_addr);
-        address = (void *)&addr6;
+    if (family == AF_INET) {
+        if (uv_inet_pton(AF_INET, name, &addr4) == 1) {
+            length = sizeof(struct in_addr);
+            address = (void *)&addr4;
+        } else {
+            PyErr_SetString(PyExc_ValueError, "invalid IP address");
+            return NULL;
+        }
+    } else if (family == AF_INET6) {
+        if (uv_inet_pton(AF_INET6, name, &addr6) == 1) {
+            length = sizeof(struct in6_addr);
+            address = (void *)&addr6;
+        } else {
+            PyErr_SetString(PyExc_ValueError, "invalid IP address");
+            return NULL;
+        }
     } else {
-        PyErr_SetString(PyExc_ValueError, "invalid IP address");
+        PyErr_SetString(PyExc_ValueError, "invalid address family");
         return NULL;
     }
 
@@ -925,7 +1031,7 @@ Channel_func_gethostbyaddr(Channel *self, PyObject *args, PyObject *kwargs)
 
 
 static PyObject *
-Channel_func_getnameinfo(Channel *self, PyObject *args, PyObject *kwargs)
+Channel_func_getnameinfo(Channel *self, PyObject *args)
 {
     char *addr;
     int port, flags, length;
@@ -992,8 +1098,22 @@ Channel_func_destroy(Channel *self)
 static PyObject *
 Channel_func_set_local_ip4(Channel *self, PyObject *args)
 {
+    char *ip;
+    struct in_addr addr4;
+
     CHECK_CHANNEL(self);
-    // TODO
+
+    if (!PyArg_ParseTuple(args, "s:set_local_ip4", &ip)) {
+        return NULL;
+    }
+
+    if (uv_inet_pton(AF_INET, ip, &addr4) == 1) {
+        ares_set_local_ip4(self->channel, ntohl(addr4.s_addr));
+    } else {
+        PyErr_SetString(PyExc_ValueError, "invalid IP address");
+        return NULL;
+    }
+
     Py_RETURN_NONE;
 }
 
@@ -1014,7 +1134,7 @@ Channel_func_set_local_dev(Channel *self, PyObject *args)
 
     CHECK_CHANNEL(self);
 
-    if (PyArg_ParseTuple(args, "s:set_local_dev", &dev)) {
+    if (!PyArg_ParseTuple(args, "s:set_local_dev", &dev)) {
         return NULL;
     }
     ares_set_local_dev(self->channel, dev);
@@ -1036,68 +1156,6 @@ Channel_func_process_fd(Channel *self, PyObject *args)
 
     ares_process_fd(self->channel, (ares_socket_t)read_fd, (ares_socket_t)write_fd);
     Py_RETURN_NONE;
-}
-
-
-static PyObject *
-fdset2list(fd_set set)
-{
-    int i;
-    PyObject *lst, *item;
-    
-    lst = PyList_New(0);
-    if (!lst) {
-        PyErr_NoMemory();
-        return NULL;
-    }
-
-    for (i = 0; i < FD_SETSIZE; i++) {
-        if (FD_ISSET(i, &set)) {
-            item = PyInt_FromLong((long)i);
-            PyList_Append(lst, item);
-            Py_DECREF(item);
-        }
-    }
-    return lst;
-}
-
-static PyObject *
-Channel_func_fds(Channel *self)
-{
-    int nfds;
-    fd_set read_fds, write_fds;
-    PyObject *tpl, *rfds, *wfds;
-
-    CHECK_CHANNEL(self);
-
-    tpl = PyTuple_New(2);
-    if (!tpl) {
-        PyErr_NoMemory();
-        return NULL;
-    }
-
-    FD_ZERO(&read_fds);
-    FD_ZERO(&write_fds);
-
-    nfds = ares_fds(self->channel, &read_fds, &write_fds);
-    if (nfds == 0) {
-        rfds = PyList_New(0);
-        wfds = PyList_New(0);
-    } else {
-        rfds = fdset2list(read_fds);
-        wfds = fdset2list(write_fds);
-    }
-
-    if (!rfds || !wfds) {
-        Py_DECREF(tpl);
-        Py_XDECREF(rfds);
-        Py_XDECREF(wfds);
-        return NULL;
-    }
-
-    PyTuple_SET_ITEM(tpl, 0, rfds);
-    PyTuple_SET_ITEM(tpl, 1, wfds);
-    return tpl;
 }
 
 
@@ -1198,8 +1256,8 @@ set_nameservers(Channel *self, PyObject *value)
     }
 
     r = ares_set_servers(self->channel, servers);
-    if (r != 0) {
-        PyErr_SetString(PyExc_AresError, "error setting nameservers");
+    if (r != ARES_SUCCESS) {
+        RAISE_ARES_EXCEPTION(r);
         ret = -1;
     }
 
@@ -1232,8 +1290,8 @@ Channel_servers_get(Channel *self, void *closure)
     }
 
     r = ares_get_servers(self->channel, &servers);
-    if (r != 0) {
-        PyErr_SetString(PyExc_AresError, "error getting c-ares nameservers");
+    if (r != ARES_SUCCESS) {
+        RAISE_ARES_EXCEPTION(r);
         return NULL;
     }
 
@@ -1271,6 +1329,68 @@ Channel_servers_set(Channel *self, PyObject *value, void *closure)
 }
 
 
+static PyObject *
+fdset2list(fd_set set)
+{
+    int i;
+    PyObject *lst, *item;
+    
+    lst = PyList_New(0);
+    if (!lst) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    for (i = 0; i < FD_SETSIZE; i++) {
+        if (FD_ISSET(i, &set)) {
+            item = PyInt_FromLong((long)i);
+            PyList_Append(lst, item);
+            Py_DECREF(item);
+        }
+    }
+    return lst;
+}
+
+static PyObject *
+Channel_fds_get(Channel *self, void *closure)
+{
+    int nfds;
+    fd_set read_fds, write_fds;
+    PyObject *tpl, *rfds, *wfds;
+
+    UNUSED_ARG(closure);
+    CHECK_CHANNEL(self);
+
+    tpl = PyTuple_New(2);
+    if (!tpl) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+
+    nfds = ares_fds(self->channel, &read_fds, &write_fds);
+    if (nfds == 0) {
+        rfds = PyList_New(0);
+        wfds = PyList_New(0);
+    } else {
+        rfds = fdset2list(read_fds);
+        wfds = fdset2list(write_fds);
+    }
+
+    if (!rfds || !wfds) {
+        Py_DECREF(tpl);
+        Py_XDECREF(rfds);
+        Py_XDECREF(wfds);
+        return NULL;
+    }
+
+    PyTuple_SET_ITEM(tpl, 0, rfds);
+    PyTuple_SET_ITEM(tpl, 1, wfds);
+    return tpl;
+}
+
 
 static int
 Channel_tp_init(Channel *self, PyObject *args, PyObject *kwargs)
@@ -1301,8 +1421,8 @@ Channel_tp_init(Channel *self, PyObject *args, PyObject *kwargs)
     }
 
     r = ares_library_init(ARES_LIB_INIT_ALL);
-    if (r != 0) {
-        PyErr_SetString(PyExc_AresError, "error initializing c-ares library");
+    if (r != ARES_SUCCESS) {
+        RAISE_ARES_EXCEPTION(r);
         return -1;
     }
     ares_lib_initialized = True;
@@ -1343,8 +1463,8 @@ Channel_tp_init(Channel *self, PyObject *args, PyObject *kwargs)
     // TODO: domains, lookups, sock_sndbug, sock_rcvbuf, sortlist
 
     r = ares_init_options(&self->channel, &options, optmask);
-    if (r != 0) {
-        PyErr_SetString(PyExc_AresError, "error setting c-ares channel options");
+    if (r != ARES_SUCCESS) {
+        RAISE_ARES_EXCEPTION(r);
         goto error;
     }
 
@@ -1403,9 +1523,9 @@ Channel_tp_dealloc(Channel *self)
 
 static PyMethodDef
 Channel_tp_methods[] = {
-    { "gethostbyname", (PyCFunction)Channel_func_gethostbyname, METH_VARARGS|METH_KEYWORDS, "Gethostbyname" },
-    { "gethostbyaddr", (PyCFunction)Channel_func_gethostbyaddr, METH_VARARGS|METH_KEYWORDS, "Gethostbyaddr" },
-    { "getnameinfo", (PyCFunction)Channel_func_getnameinfo, METH_VARARGS|METH_KEYWORDS, "Getnameinfo" },
+    { "gethostbyname", (PyCFunction)Channel_func_gethostbyname, METH_VARARGS, "Gethostbyname" },
+    { "gethostbyaddr", (PyCFunction)Channel_func_gethostbyaddr, METH_VARARGS, "Gethostbyaddr" },
+    { "getnameinfo", (PyCFunction)Channel_func_getnameinfo, METH_VARARGS, "Getnameinfo" },
     { "query", (PyCFunction)Channel_func_query, METH_VARARGS, "Run a DNS query of the specified type" },
     { "cancel", (PyCFunction)Channel_func_cancel, METH_NOARGS, "Cancel all pending queries on this resolver" },
     { "destroy", (PyCFunction)Channel_func_destroy, METH_NOARGS, "Destroy this channel, it will no longer be usable" },
@@ -1413,14 +1533,14 @@ Channel_tp_methods[] = {
     { "set_local_ip4", (PyCFunction)Channel_func_set_local_ip4, METH_VARARGS, "Set source IPv4 address" },
     { "set_local_ip6", (PyCFunction)Channel_func_set_local_ip6, METH_VARARGS, "Set source IPv6 address" },
     { "set_local_dev", (PyCFunction)Channel_func_set_local_dev, METH_VARARGS, "Set source device name" },
-    { "fds", (PyCFunction)Channel_func_fds, METH_VARARGS, "Returns the set of file descriptors which the calling application should select on" },
     { "timeout", (PyCFunction)Channel_func_timeout, METH_VARARGS, "Determine polling timeout" },
     { NULL }
 };
 
 
 static PyGetSetDef Channel_tp_getsets[] = {
-    {"servers", (getter)Channel_servers_get, (setter)Channel_servers_set, "DNS nameserver", NULL},
+    {"fds", (getter)Channel_fds_get, 0, "Set of file descriptors the application needs to poll", NULL},
+    {"servers", (getter)Channel_servers_get, (setter)Channel_servers_set, "DNS nameservers", NULL},
     {NULL}
 };
 
@@ -1500,11 +1620,24 @@ init_ares(void)
         PyStructSequence_InitType(&AresNameinfoResultType, &ares_nameinfo_result_desc);
     if (AresQueryMXResultType.tp_name == 0)
         PyStructSequence_InitType(&AresQueryMXResultType, &ares_query_mx_result_desc);
+    if (AresQuerySOAResultType.tp_name == 0)
+        PyStructSequence_InitType(&AresQuerySOAResultType, &ares_query_soa_result_desc);
     if (AresQuerySRVResultType.tp_name == 0)
         PyStructSequence_InitType(&AresQuerySRVResultType, &ares_query_srv_result_desc);
     if (AresQueryNAPTRResultType.tp_name == 0)
         PyStructSequence_InitType(&AresQueryNAPTRResultType, &ares_query_naptr_result_desc);
 
+    /* Flag values */
+    PyModule_AddIntMacro(module, ARES_FLAG_USEVC);
+    PyModule_AddIntMacro(module, ARES_FLAG_PRIMARY);
+    PyModule_AddIntMacro(module, ARES_FLAG_IGNTC);
+    PyModule_AddIntMacro(module, ARES_FLAG_NORECURSE);
+    PyModule_AddIntMacro(module, ARES_FLAG_STAYOPEN);
+    PyModule_AddIntMacro(module, ARES_FLAG_NOSEARCH);
+    PyModule_AddIntMacro(module, ARES_FLAG_NOALIASES);
+    PyModule_AddIntMacro(module, ARES_FLAG_NOCHECKRESP);
+
+    /* Nameinfo flag values */
     PyModule_AddIntMacro(module, ARES_NI_NOFQDN);
     PyModule_AddIntMacro(module, ARES_NI_NUMERICHOST);
     PyModule_AddIntMacro(module, ARES_NI_NAMEREQD);
@@ -1521,14 +1654,17 @@ init_ares(void)
     PyModule_AddIntMacro(module, ARES_NI_IDN_ALLOW_UNASSIGNED);
     PyModule_AddIntMacro(module, ARES_NI_IDN_USE_STD3_ASCII_RULES);
 
+    /* Bad socket */
     PyModule_AddIntMacro(module, ARES_SOCKET_BAD);
 
+    /* Query types */
     PyModule_AddIntConstant(module, "QUERY_TYPE_A", T_A);
     PyModule_AddIntConstant(module, "QUERY_TYPE_AAAA", T_AAAA);
     PyModule_AddIntConstant(module, "QUERY_TYPE_CNAME", T_CNAME);
     PyModule_AddIntConstant(module, "QUERY_TYPE_MX", T_MX);
     PyModule_AddIntConstant(module, "QUERY_TYPE_NAPTR", T_NAPTR);
     PyModule_AddIntConstant(module, "QUERY_TYPE_NS", T_NS);
+    PyModule_AddIntConstant(module, "QUERY_TYPE_SOA", T_SOA);
     PyModule_AddIntConstant(module, "QUERY_TYPE_SRV", T_SRV);
     PyModule_AddIntConstant(module, "QUERY_TYPE_TXT", T_TXT);
 

@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, '../')
 
 import pyuv
-import weakref
+import socket
 
 
 class DNSResolver(object):
@@ -53,7 +53,7 @@ class DNSResolver(object):
         self._channel.query(query_type, name, cb)
 
     def gethostbyname(self, name, cb):
-        self._channel.gethostbyname(name, cb)
+        self._channel.gethostbyname(name, socket.AF_INET, cb)
 
 
 if __name__ == '__main__':
@@ -65,7 +65,8 @@ if __name__ == '__main__':
         print error
     loop = pyuv.Loop.default_loop()
     resolver = DNSResolver(loop)
-    resolver.query(pyuv.cares.QUERY_TYPE_A, 'google.com', query_cb)
+    resolver.query('google.com', pyuv.cares.QUERY_TYPE_A, query_cb)
+    resolver.query('sip2sip.info', pyuv.cares.QUERY_TYPE_SOA, query_cb)
     resolver.gethostbyname('apple.com', gethostbyname_cb)
     loop.run()
 

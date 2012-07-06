@@ -187,6 +187,9 @@ init_pyuv(void)
     /* libuv version */
     PyModule_AddStringConstant(pyuv, "LIBUV_VERSION", __MSTR(LIBUV_VERSION));
 
+    /* c-ares version */
+    PyModule_AddStringConstant(pyuv, "ARES_VERSION", ares_version(NULL));
+
     return pyuv;
 
 fail:

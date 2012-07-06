@@ -93,41 +93,42 @@ init_errno(void)
     module_dict = PyModule_GetDict(module);
     errorcode_dict = PyDict_New();
     ares_errorcode_dict = PyDict_New();
-    if (!module_dict || !errorcode_dict || 
+    if (!module_dict || !errorcode_dict ||
         PyDict_SetItemString(module_dict, "errorcode", errorcode_dict) < 0 || PyDict_SetItemString(module_dict, "ares_errorcode", ares_errorcode_dict) < 0) {
         return NULL;
     }
 
-#define XX(val, name, s) inscode(module_dict, errorcode_dict, __MSTR(UV_##name), UV_##name);
+#define XX(val, name, s) inscode(module_dict, errorcode_dict, __STRING(UV_##name), UV_##name);
     UV_ERRNO_MAP(XX)
 #undef XX
 
-    /* TODO: also use some preprocessor trickery for c-ares errnos */
-    inscode(module_dict, ares_errorcode_dict, "ARES_SUCCESS", ARES_SUCCESS);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENODATA", ARES_ENODATA);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EFORMERR", ARES_EFORMERR);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ESERVFAIL", ARES_ESERVFAIL);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENOTFOUND", ARES_ENOTFOUND);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENOTIMP", ARES_ENOTIMP);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EREFUSED", ARES_EREFUSED);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADQUERY", ARES_EBADQUERY);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADNAME", ARES_EBADNAME);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADFAMILY", ARES_EBADFAMILY);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADRESP", ARES_EBADRESP);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ECONNREFUSED", ARES_ECONNREFUSED);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ETIMEOUT", ARES_ETIMEOUT);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EOF", ARES_EOF);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EFILE", ARES_EFILE);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENOMEM", ARES_ENOMEM);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EDESTRUCTION", ARES_EDESTRUCTION);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADSTR", ARES_EBADSTR);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADFLAGS", ARES_EBADFLAGS);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENONAME", ARES_ENONAME);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EBADHINTS", ARES_EBADHINTS);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ENOTINITIALIZED", ARES_ENOTINITIALIZED);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ELOADIPHLPAPI", ARES_ELOADIPHLPAPI);
-    inscode(module_dict, ares_errorcode_dict, "ARES_EADDRGETNETWORKPARAMS", ARES_EADDRGETNETWORKPARAMS);
-    inscode(module_dict, ares_errorcode_dict, "ARES_ECANCELLED", ARES_ECANCELLED);
+#define XX(name) inscode(module_dict, ares_errorcode_dict, __STRING(ARES_##name), ARES_##name);
+    XX(SUCCESS)
+    XX(ENODATA)
+    XX(EFORMERR)
+    XX(ESERVFAIL)
+    XX(ENOTFOUND)
+    XX(ENOTIMP)
+    XX(EREFUSED)
+    XX(EBADQUERY)
+    XX(EBADNAME)
+    XX(EBADFAMILY)
+    XX(EBADRESP)
+    XX(ECONNREFUSED)
+    XX(ETIMEOUT)
+    XX(EOF)
+    XX(EFILE)
+    XX(ENOMEM)
+    XX(EDESTRUCTION)
+    XX(EBADSTR)
+    XX(EBADFLAGS)
+    XX(ENONAME)
+    XX(EBADHINTS)
+    XX(ENOTINITIALIZED)
+    XX(ELOADIPHLPAPI)
+    XX(EADDRGETNETWORKPARAMS)
+    XX(ECANCELLED)
+#undef XX
 
     Py_DECREF(errorcode_dict);
     Py_DECREF(ares_errorcode_dict);
