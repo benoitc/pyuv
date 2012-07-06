@@ -1121,8 +1121,22 @@ Channel_func_set_local_ip4(Channel *self, PyObject *args)
 static PyObject *
 Channel_func_set_local_ip6(Channel *self, PyObject *args)
 {
+    char *ip;
+    struct in6_addr addr6;
+
     CHECK_CHANNEL(self);
-    // TODO
+
+    if (!PyArg_ParseTuple(args, "s:set_local_ip6", &ip)) {
+        return NULL;
+    }
+
+    if (uv_inet_pton(AF_INET6, ip, &addr6) == 1) {
+        ares_set_local_ip6(self->channel, addr6.s6_addr);
+    } else {
+        PyErr_SetString(PyExc_ValueError, "invalid IP address");
+        return NULL;
+    }
+
     Py_RETURN_NONE;
 }
 
