@@ -1474,7 +1474,6 @@ Channel_tp_init(Channel *self, PyObject *args, PyObject *kwargs)
         Py_INCREF(sock_state_cb);
         self->sock_state_cb = sock_state_cb;
     }
-    // TODO: domains, lookups, sock_sndbug, sock_rcvbuf, sortlist
 
     r = ares_init_options(&self->channel, &options, optmask);
     if (r != ARES_SUCCESS) {
